@@ -25,7 +25,8 @@ hijri_months_id = {
 st.set_page_config(
     page_title="Jadwal Sholat Kota Medan",
     page_icon="🕌",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # --- INISIALISASI SESSION STATE ---
@@ -44,23 +45,21 @@ if 'current_azan' not in st.session_state:
 if 'last_date' not in st.session_state:
     st.session_state.last_date = datetime.now().strftime("%Y-%m-%d")
 
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = datetime.now()
+
+# --- PATH FIX untuk Streamlit Cloud ---
 BASE_DIR = Path(__file__).parent
 AUDIO_DIR = BASE_DIR / "assets" / "audio"
 
 # File audio azan berdasarkan jenis sholat
 AZAN_FILES = {
-    "Subuh": AUDIO_DIR / "fajr_128_44.mp3",
-    "Dzuhur": AUDIO_DIR / "Adzan-Misyari-Rasyid.mp3",
-    "Ashar": AUDIO_DIR / "Adzan-Misyari-Rasyid.mp3", 
-    "Maghrib": AUDIO_DIR / "Adzan-Misyari-Rasyid.mp3",
-    "Isya": AUDIO_DIR / "Adzan-Misyari-Rasyid.mp3"
+    "Subuh": "fajr_128_44.mp3",
+    "Dzuhur": "Adzan-Misyari-Rasyid.mp3", 
+    "Ashar": "Adzan-Misyari-Rasyid.mp3",
+    "Maghrib": "Adzan-Misyari-Rasyid.mp3",
+    "Isya": "Adzan-Misyari-Rasyid.mp3"
 }
-
-# File default untuk fallback
-DEFAULT_AZAN_FILE = AUDIO_DIR / "Adzan-Misyari-Rasyid.mp3"
-
-# Buat direktori jika belum ada
-AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- CSS Kustom Modern & Responsif ---
 st.markdown("""
@@ -340,14 +339,10 @@ body::before {
 def get_azan_file(prayer_name):
     """Mendapatkan file azan yang sesuai berdasarkan nama sholat"""
     if prayer_name in AZAN_FILES:
-        azan_file = AZAN_FILES[prayer_name]
-        if azan_file.exists():
-            return azan_file
-    
-    # Fallback ke file default
-    if DEFAULT_AZAN_FILE.exists():
-        return DEFAULT_AZAN_FILE
-    
+        audio_file = AZAN_FILES[prayer_name]
+        audio_path = AUDIO_DIR / audio_file
+        if audio_path.exists():
+            return audio_path
     return None
 
 def play_azan_audio(prayer_name):
@@ -426,11 +421,12 @@ def play_azan_online():
 def check_audio_files():
     """Memeriksa keberadaan semua file audio azan"""
     status = {}
-    for prayer_name, file_path in AZAN_FILES.items():
+    for prayer_name, audio_file in AZAN_FILES.items():
+        audio_path = AUDIO_DIR / audio_file
         status[prayer_name] = {
-            'exists': file_path.exists(),
-            'path': str(file_path),
-            'size': f"{file_path.stat().st_size / (1024 * 1024):.2f} MB" if file_path.exists() else 'N/A'
+            'exists': audio_path.exists(),
+            'path': str(audio_path),
+            'size': f"{audio_path.stat().st_size / (1024 * 1024):.2f} MB" if audio_path.exists() else 'N/A'
         }
     return status
 
@@ -557,7 +553,7 @@ st.markdown('<div class="main-container">', unsafe_allow_html=True)
 st.markdown("""
     <div class="header-section">
         <h1 class="header-title">🕌 Aplikasi Jadwal Sholat</h1>
-        <p class="header-subtitle">Waktu sholat terkini</p>
+        <p class="header-subtitle">Waktu sholat terkini dengan notifikasi azan otomatis</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -574,7 +570,7 @@ with st.sidebar:
     
     if subuh_ready and others_ready:
         st.success("✅ Semua file azan tersedia")
-        st.info("**Konfigurasi Audio:**\n- Subuh: fajr_128.44.mp3\n- Lainnya: Adzan-Misyari-Rasyid.mp3")
+        st.info("**Konfigurasi Audio:**\n- Subuh: fajr_128_44.mp3\n- Lainnya: Adzan-Misyari-Rasyid.mp3")
     elif subuh_ready:
         st.warning("⚠️ File azan Subuh tersedia, lainnya menggunakan fallback")
     elif others_ready:
@@ -674,6 +670,7 @@ if data_sholat:
         - ✅ Audio azan berbeda untuk Subuh dan sholat lainnya
         - ✅ Tampilan responsif untuk semua device
         - ✅ Kalender Hijriyah dan Masehi
+        - ✅ Auto-refresh setiap 10 detik
         """)
     with col2:
         if st.button("🔄 Refresh Data", use_container_width=True):
@@ -684,6 +681,8 @@ else:
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# Auto-refresh setiap 10 detik untuk update waktu dan cek azan
-time_module.sleep(10)
-st.rerun()
+# Auto-refresh dengan logic yang lebih baik
+current_time = datetime.now()
+if (current_time - st.session_state.last_refresh).total_seconds() > 10:
+    st.session_state.last_refresh = current_time
+    st.rerun()
